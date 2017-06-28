@@ -13,5 +13,21 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="WangYingXmlParser">
+      <UniqueIdentifier>{705edc1d-fbb2-4090-aa9d-30781ad62ca3}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="WangYingXmlParser\WangYingXmlParser.h">
+      <Filter>WangYingXmlParser</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="WangYingXmlParser\WangYingXmlParser.cpp">
+      <Filter>WangYingXmlParser</Filter>
+    </ClCompile>
+    <ClCompile Include="..\testXmlParser.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

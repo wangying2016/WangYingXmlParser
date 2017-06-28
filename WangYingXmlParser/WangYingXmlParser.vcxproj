@@ -111,6 +111,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="WangYingXmlParser\WangYingXmlParser.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\testXmlParser.cpp" />
+    <ClCompile Include="WangYingXmlParser\WangYingXmlParser.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

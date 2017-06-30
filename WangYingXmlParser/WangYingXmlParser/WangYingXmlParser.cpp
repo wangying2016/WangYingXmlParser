@@ -96,6 +96,8 @@ bool CWangYingXmlParser::_ParseSource(std::string strXml)
 // \b\w+="\w+"
 // 匹配属性 >wang ying<
 // >.*<
+// 匹配标签头
+// <\w+[^\n<]*>
 bool CWangYingXmlParser::_ParseOneItem(std::string strOneItemXml, WangYingXmlParser::CItem *pItem)
 {
 	if (pItem == nullptr) return false;
@@ -108,35 +110,68 @@ bool CWangYingXmlParser::_ParseOneItem(std::string strOneItemXml, WangYingXmlPar
 		std::string strItemName = m.str();
 		newItem.name = strItemName.erase(0, 1);
 		s = m.suffix().str();
-		while (std::regex_search(s, m, regexItemName)) {
-			WangYingXmlParser::CItem subItem;
-			_ParseOneItem(m.str(), &subItem);
-			newItem.subitems.push_back(subItem);
-			s = m.suffix().str();
-		}
 	}
 	// 获得：属性
 	s = strOneItemXml;
-	std::regex regexAtrribute("\\b\\w+=\"\\w+\"");
-	while (std::regex_search(s, m, regexAtrribute)) {
-		WangYingXmlParser::CAttribute newAtrribute;
-		_ParseOneAttribute(m.str(), &newAtrribute);
-		newItem.attributes.push_back(newAtrribute);
-		s = m.suffix().str();
+	std::smatch tabHeadMatch;
+	std::regex regexTabHead("<\\w+[^\\n<]*>");
+	if (std::regex_search(s, tabHeadMatch, regexTabHead)) {
+		std::string strTabHead = tabHeadMatch.str();
+		std::smatch attributeMatch;
+		std::regex regexAtrribute("\\b\\w+=\"\\w+\"");
+		while (std::regex_search(strTabHead, attributeMatch, regexAtrribute)) {
+			WangYingXmlParser::CAttribute newAtrribute;
+			_ParseOneAttribute(attributeMatch.str(), &newAtrribute);
+			newItem.attributes.push_back(newAtrribute);
+			strTabHead = attributeMatch.suffix().str();
+		}
 	}
+	
 	// 特殊属性：双标签对中认作 text 属性值
+	// 子项目往往也出现在 text 属性值中，此时需要根据 text 是否
+	// 匹配得出新的 Item 将其设置为子 Item 还是 text 属性值
 	s = strOneItemXml;
 	std::regex regexText(">.*<");
 	if (std::regex_search(s, m, regexText)) {
-		WangYingXmlParser::CAttribute textAtrribute;
+		// --获取：中间的文本
 		std::string strTempText = m.str();
 		strTempText.erase(strTempText.end() - 1, strTempText.end());
 		strTempText.erase(0, 1);
-		textAtrribute.name = "text";
-		textAtrribute.value = strTempText;
-		newItem.attributes.push_back(textAtrribute);
+		// --解析：解析中间文本，视匹配结果将其视作属性或者子项目
+		_ParseSubItem(strTempText, &newItem);
 	}
 	*pItem = newItem;
+	return true;
+}
+
+// 解析：解析一个项目的子项目或者 text 属性（在项目的标签对之间的认为是子项目或者 text 属性）
+bool CWangYingXmlParser::_ParseSubItem(std::string strOneItemXml, WangYingXmlParser::CItem *pItem)
+{
+	if (pItem == nullptr) return false;
+	std::string s = strOneItemXml;
+	std::smatch m;
+	std::regex regexItem("<(\\w+).*>.*</\\1>|<\\w+[^/>]*/>");
+	// 匹配：识别成项目，递归调用 _ParseOneItem 匹配子项目
+	if (std::regex_search(s, m, regexItem)) {
+		WangYingXmlParser::CItem newSubItem;
+		_ParseOneItem(m.str(), &newSubItem);
+		pItem->subitems.push_back(newSubItem);
+		s = m.suffix().str();
+		while (std::regex_search(s, m, regexItem)) {
+			WangYingXmlParser::CItem newSubItem;
+			std::string strss = m.str();
+			_ParseOneItem(m.str(), &newSubItem);
+			pItem->subitems.push_back(newSubItem);
+			s = m.suffix().str();
+		}
+	} 
+	// 匹配：识别成 text 属性
+	else {
+		WangYingXmlParser::CAttribute textAtrribute;
+		textAtrribute.name = "text";
+		textAtrribute.value = s;
+		pItem->attributes.push_back(textAtrribute);
+	}
 	return true;
 }
 
@@ -178,4 +213,29 @@ bool CWangYingXmlParser::GetXmlDocument(WangYingXmlParser::CDocument *pXmlDocume
 	if (pXmlDocument == nullptr) return false;
 	*pXmlDocument = m_cDocument;
 	return true;
+}
+
+// 打印：将当前 xml 的数据打印到标准输出
+void CWangYingXmlParser::PrintXmlData(WangYingXmlParser::CDocument xmlDocument)
+{
+	std::cout << "解析后得到的信息：" << std::endl;
+	for (auto item : xmlDocument.items) {
+		_PrintOneItem(item, 0);
+	}
+}
+
+// 打印：打印一个 Item
+void CWangYingXmlParser::_PrintOneItem(WangYingXmlParser::CItem item, int subLevel)
+{
+	std::string strTab;
+	for (int i = 0; i < subLevel; ++i) strTab += "\t";
+	std::cout << "Level_" << subLevel << std::endl;
+	std::cout << strTab << item.name << ":" << std::endl;
+	for (auto attribute : item.attributes) {
+		std::cout << "\tattributes: " << attribute.name << "：" << attribute.value << std::endl;
+	}
+	subLevel++;
+	for (auto subItem : item.subitems) {
+		_PrintOneItem(subItem, subLevel);
+	}
 }

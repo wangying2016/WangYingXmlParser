@@ -14,30 +14,39 @@ CWangYingXmlParser::~CWangYingXmlParser()
 	m_cDocument.items.clear();
 }
 
+// 外部接口：解析，有待多种类型参数适配
 bool CWangYingXmlParser::ParseXml(std::string strXml)
 {
 	// 检查：输入文本是否合法
-	bool bIsXmlValid = false;
 	std::string strErrorMsg;
-	bIsXmlValid = _IsXmlValid(strXml, &strErrorMsg);
-	if (!bIsXmlValid) {
-		std::cout << strErrorMsg << std::endl;
+	if (!_CheckXmlValid(strXml)) {
 		return false;
 	}
 	// 解析：xml 文本
 	_ParseSource(strXml);
+	return true;
+}
 
+// 外部接口：获得出错信息
+bool CWangYingXmlParser::GetErrorMessage(std::string *pstrErrorMessage)
+{
+	if (pstrErrorMessage == nullptr) return false;
+	*pstrErrorMessage = m_strErroMessage;
 	return true;
 }
 
 // 检查：输入文本是否合法
-bool CWangYingXmlParser::_IsXmlValid(std::string strXml, std::string *pstrErrorMsg)
+// 1. 尖括号 < 和 > 必须搭配出现
+// 2. 反斜线 / 出现的时候 < 必须在紧接着之前出现过
+// 3. 两个标签对单词一定要一样，单标签元素无需处理
+bool CWangYingXmlParser::_CheckXmlValid(std::string strXml)
 {
-	if (nullptr == pstrErrorMsg) return false;
-	std::stack<char> stackBracket;	// 栈：尖括号
-	std::stack<char> stackBackSlash;// 栈：反斜线
-	bool bBlackSlashValid = true;
-	std::string strErrorMsg;
+	std::stack<char> stackBracket;		// 栈：尖括号
+	std::stack<char> stackBackSlash;	// 栈：反斜线
+	std::stack<std::string> statckTab;  // 栈：标签对
+	bool bBracketValid = true;			// 合法：尖括号匹配
+	bool bBlackSlashValid = true;		// 合法：反斜线
+	bool bIsSymmetry = true;			// 合法：标签对称性
 	// 检查：括号匹配
 	for (int i = 0; i < strXml.size(); ++i) {
 		// --记录：当出现 < ，则直接压栈
@@ -57,14 +66,66 @@ bool CWangYingXmlParser::_IsXmlValid(std::string strXml, std::string *pstrErrorM
 	}
 	// 出错：反斜线不匹配
 	if (!bBlackSlashValid)
-		strErrorMsg = "parse error: black slash write error.";
+		m_strErroMessage += "parse error: black slash write error.\n";
 	// 出错：尖括号不匹配
 	if (stackBracket.size() != 0) {
-		bBlackSlashValid = false;
-		strErrorMsg = "parse error: bracket does not matched.";
+		bBracketValid = false;
+		m_strErroMessage += "parse error: bracket does not matched.\n";
 	}
-	*pstrErrorMsg = strErrorMsg;
-	return bBlackSlashValid;
+	// 出错：标签对不对称
+	_CheckTabSymmetry(strXml, &bIsSymmetry);
+	if (!bIsSymmetry) {
+		m_strErroMessage += "parse error: tab does not symmetry.\n";
+	}
+	return bBlackSlashValid && bIsSymmetry && bBracketValid;
+}
+
+// 检查：标签对对称性检查
+// 匹配：双标签对的标签头
+// <\w+[^\n/<]*>
+// 匹配：标签头里面的标签名
+// <\w+\b
+// 匹配：双标签对的标签尾
+// </\w+[\s]*>
+// 匹配：标签尾里面的标签名
+// /\w+
+// 匹配：双标签对的标签头和尾
+// <\w+[^\n/<]*>|</\w+[\s]*>
+bool CWangYingXmlParser::_CheckTabSymmetry(std::string strXml, bool *pbIsSymmetry)
+{
+	if (!pbIsSymmetry) return false;
+	bool bIsSymmetry = true;
+	std::string s = strXml;
+	std::smatch m;
+	std::regex regexTab("<\\w+[^\\n/<]*>|</\\w+[\\s]*>");
+	std::regex regexHeadName("<\\w+\\b");
+	std::regex regexTailName("/\\w+");
+	std::stack<std::string> stackTab;
+	// 找到双标签对的标签头
+	while (std::regex_search(s, m, regexTab)) {
+		// --检查:根据匹配的是标签头还是标签尾进行不同的处理
+		std::string strTemp = m.str();
+		std::smatch tempMatch;
+		// --匹配：标签头
+		if (std::regex_search(strTemp, tempMatch, regexHeadName)) {
+				std::string strTabName = tempMatch.str();
+				strTabName.erase(0, 1);
+				stackTab.push(strTabName);
+		} 
+		// --匹配：标签尾
+		else {
+			if (std::regex_search(strTemp, tempMatch, regexTailName)) {
+				std::string strTabName = tempMatch.str();
+				strTabName.erase(0, 1);
+				if (stackTab.size() != 0 && stackTab.top() == strTabName) {
+					stackTab.pop();
+				}
+			}
+		}
+		s = m.suffix().str();
+	}
+	*pbIsSymmetry = stackTab.size() == 0 ? true : false;
+	return true;
 }
 
 // 解析：解析文本，将 xml 文本解析成一个一个项目
@@ -207,7 +268,7 @@ bool CWangYingXmlParser::_ParseOneAttribute(std::string strOneAttribute, WangYin
 	return true;
 }
 
-// 获取相关，获取当前 xml 项目及其属性值
+// 外部接口：获取当前 xml 的数据
 bool CWangYingXmlParser::GetXmlDocument(WangYingXmlParser::CDocument *pXmlDocument)
 {
 	if (pXmlDocument == nullptr) return false;
@@ -215,7 +276,7 @@ bool CWangYingXmlParser::GetXmlDocument(WangYingXmlParser::CDocument *pXmlDocume
 	return true;
 }
 
-// 打印：将当前 xml 的数据打印到标准输出
+// 外部接口：将当前 xml 的数据打印到标准输出
 void CWangYingXmlParser::PrintXmlData(WangYingXmlParser::CDocument xmlDocument)
 {
 	std::cout << "解析后得到的信息：" << std::endl;
